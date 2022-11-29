@@ -22,10 +22,6 @@ import (
 	"sync"
 	"time"
 
-	kcpcache "github.com/kcp-dev/apimachinery/pkg/cache"
-	kcpapiextensionsv1client "k8s.io/apiextensions-apiserver/pkg/client/kcp/clientset/versioned/typed/apiextensions/v1"
-	kcpapiextensionsv1informers "k8s.io/apiextensions-apiserver/pkg/client/kcp/informers/externalversions/apiextensions/v1"
-	kcpapiextensionsv1listers "k8s.io/apiextensions-apiserver/pkg/client/kcp/listers/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -39,13 +35,16 @@ import (
 	apiextensionsinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	client "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
+	informers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions/apiextensions/v1"
+	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 )
 
 // ConditionController is maintaining the NonStructuralSchema condition.
 type ConditionController struct {
-	crdClient kcpapiextensionsv1client.CustomResourceDefinitionsClusterGetter
+	crdClient client.CustomResourceDefinitionsGetter
 
-	crdLister kcpapiextensionsv1listers.CustomResourceDefinitionClusterLister
+	crdLister listers.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
 
 	// To allow injection for testing.
@@ -60,7 +59,10 @@ type ConditionController struct {
 }
 
 // NewConditionController constructs a non-structural schema condition controller.
-func NewConditionController(crdInformer kcpapiextensionsv1informers.CustomResourceDefinitionClusterInformer, crdClient kcpapiextensionsv1client.ApiextensionsV1ClusterInterface) *ConditionController {
+func NewConditionController(
+	crdInformer informers.CustomResourceDefinitionInformer,
+	crdClient client.CustomResourceDefinitionsGetter,
+) *ConditionController {
 	c := &ConditionController{
 		crdClient:          crdClient,
 		crdLister:          crdInformer.Lister(),
@@ -128,12 +130,7 @@ func calculateCondition(in *apiextensionsv1.CustomResourceDefinition) *apiextens
 }
 
 func (c *ConditionController) sync(key string) error {
-	clusterName, _, name, err := kcpcache.SplitMetaClusterNamespaceKey(key)
-	if err != nil {
-		utilruntime.HandleError(err)
-		return nil
-	}
-	inCustomResourceDefinition, err := c.crdLister.Cluster(clusterName).Get(name)
+	inCustomResourceDefinition, err := c.crdLister.Get(key)
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -169,7 +166,7 @@ func (c *ConditionController) sync(key string) error {
 		apiextensionshelpers.SetCRDCondition(crd, *cond)
 	}
 
-	_, err = c.crdClient.CustomResourceDefinitions().Cluster(clusterName).UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
+	_, err = c.crdClient.CustomResourceDefinitions().UpdateStatus(context.TODO(), crd, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
 		// deleted or changed in the meantime, we'll get called again
 		return nil
@@ -232,7 +229,7 @@ func (c *ConditionController) processNextWorkItem() bool {
 }
 
 func (c *ConditionController) enqueue(obj *apiextensionsv1.CustomResourceDefinition) {
-	key, err := kcpcache.DeletionHandlingMetaClusterNamespaceKeyFunc(obj)
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", obj, err))
 		return

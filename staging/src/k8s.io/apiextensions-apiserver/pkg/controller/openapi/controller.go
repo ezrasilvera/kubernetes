@@ -24,8 +24,6 @@ import (
 
 	kcpcache "github.com/kcp-dev/apimachinery/pkg/cache"
 	"github.com/kcp-dev/logicalcluster/v2"
-	kcpapiextensionsv1informers "k8s.io/apiextensions-apiserver/pkg/client/kcp/informers/externalversions/apiextensions/v1"
-	kcpapiextensionsv1listers "k8s.io/apiextensions-apiserver/pkg/client/kcp/listers/apiextensions/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -40,12 +38,14 @@ import (
 
 	apiextensionshelpers "k8s.io/apiextensions-apiserver/pkg/apihelpers"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	informers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions/apiextensions/v1"
+	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/controller/openapi/builder"
 )
 
 // Controller watches CustomResourceDefinitions and publishes validation schema
 type Controller struct {
-	crdLister  kcpapiextensionsv1listers.CustomResourceDefinitionClusterLister
+	crdLister  listers.CustomResourceDefinitionLister
 	crdsSynced cache.InformerSynced
 
 	// To allow injection for testing.
@@ -62,7 +62,7 @@ type Controller struct {
 }
 
 // NewController creates a new Controller with input CustomResourceDefinition informer
-func NewController(crdInformer kcpapiextensionsv1informers.CustomResourceDefinitionClusterInformer) *Controller {
+func NewController(crdInformer informers.CustomResourceDefinitionInformer) *Controller {
 	c := &Controller{
 		crdLister:  crdInformer.Lister(),
 		crdsSynced: crdInformer.Informer().HasSynced,
@@ -210,7 +210,7 @@ func (c *Controller) sync(key string) error {
 		return nil
 	}
 
-	crd, err := c.crdLister.Cluster(clusterName).Get(crdName)
+	crd, err := c.crdLister.Get(clusterName.String() + "|" + crdName)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}

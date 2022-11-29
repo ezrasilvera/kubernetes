@@ -25,7 +25,6 @@ import (
 
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
-	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
 type mockAuthzHandler struct {
@@ -87,7 +86,7 @@ type mockAuthzRuleHandler struct {
 	err              error
 }
 
-func (mock *mockAuthzRuleHandler) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
+func (mock *mockAuthzRuleHandler) RulesFor(user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	if mock.err != nil {
 		return []authorizer.ResourceRuleInfo{}, []authorizer.NonResourceRuleInfo{}, false, mock.err
 	}
@@ -151,7 +150,7 @@ func TestAuthorizationResourceRules(t *testing.T) {
 
 	authzRulesHandler := NewRuleResolvers(handler1, handler2)
 
-	rules, _, _, _ := authzRulesHandler.RulesFor(genericapirequest.NewContext(), nil, "")
+	rules, _, _, _ := authzRulesHandler.RulesFor(nil, "")
 	actual := getResourceRules(rules)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("Expected: \n%#v\n but actual: \n%#v\n", expected, actual)
@@ -190,7 +189,7 @@ func TestAuthorizationNonResourceRules(t *testing.T) {
 
 	authzRulesHandler := NewRuleResolvers(handler1, handler2)
 
-	_, rules, _, _ := authzRulesHandler.RulesFor(genericapirequest.NewContext(), nil, "")
+	_, rules, _, _ := authzRulesHandler.RulesFor(nil, "")
 	actual := getNonResourceRules(rules)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("Expected: \n%#v\n but actual: \n%#v\n", expected, actual)
